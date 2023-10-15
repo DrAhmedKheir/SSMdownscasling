@@ -1,0 +1,82 @@
+https://code.earthengine.google.com/d11f2f7bc0dd11138ecf6f5bacfd03cf
+var geometry = 
+    /* color: #d63000 */
+    /* shown: false */
+    /* displayProperties: [
+      {
+        "type": "rectangle"
+      }
+    ] */
+    ee.Geometry.Polygon(
+        [[[31.00375846572865, 31.33046135799438],
+          [31.00375846572865, 30.607470435203695],
+          [31.7590685243224, 30.607470435203695],
+          [31.7590685243224, 31.33046135799438]]], null, false);
+
+var AOI = ee.FeatureCollection("users/Elnashar/Vector/NileDelta");
+var AOI = AOI.geometry().buffer(10000);
+Map.addLayer(AOI, {}, 'AOI', 1, 1);
+
+// Toward Global Soil Moisture Monitoring With Sentinel-1; https://doi.org/10.1109/TGRS.2018.2858004
+var S1_GRD = ee.ImageCollection("COPERNICUS/S1_GRD").filterBounds(AOI)
+               .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+               .filter(ee.Filter.eq('instrumentMode', 'IW'))
+               .select('VV');
+
+var S1_GRD_ASCENDING = S1_GRD.filter(ee.Filter.eq('orbitProperties_pass', 'ASCENDING'));
+var p10_ASCENDING    = S1_GRD_ASCENDING.reduce({reducer:ee.Reducer.percentile([10])}).rename('p10_ASCENDING');
+var p90_ASCENDING    = S1_GRD_ASCENDING.reduce({reducer:ee.Reducer.percentile([90])}).rename('p90_ASCENDING');
+var k_ASCENDING      = ee.Image(80).divide(p90_ASCENDING.subtract(p10_ASCENDING)).rename('k_ASCENDING');
+var d_ASCENDING      = ee.Image(90).subtract(k_ASCENDING.multiply(p90_ASCENDING)).rename('d_ASCENDING');
+var Dry_ASCENDING    = ee.Image(0.0).subtract(d_ASCENDING).divide(k_ASCENDING).rename('DryCondition_ASCENDING');
+var Wet_ASCENDING    = ee.Image(100).subtract(d_ASCENDING).divide(k_ASCENDING).rename('WetCondition_ASCENDING');
+var Sen_ASCENDING    = Wet_ASCENDING.subtract(Dry_ASCENDING).rename('Sensitivity_ASCENDING');
+
+var S1_GRD_DESCENDING = S1_GRD.filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'));
+var p10_DESCENDING    = S1_GRD_DESCENDING.reduce({reducer:ee.Reducer.percentile([10])}).rename('p10_DESCENDING');
+var p90_DESCENDING    = S1_GRD_DESCENDING.reduce({reducer:ee.Reducer.percentile([90])}).rename('p90_DESCENDING');
+var k_DESCENDING      = ee.Image(80).divide(p90_DESCENDING.subtract(p10_DESCENDING)).rename('k_DESCENDING');
+var d_DESCENDING      = ee.Image(90).subtract(k_DESCENDING.multiply(p90_DESCENDING)).rename('d_DESCENDING');
+var Dry_DESCENDING    = ee.Image(0.0).subtract(d_DESCENDING).divide(k_DESCENDING).rename('DryCondition_DESCENDING');
+var Wet_DESCENDING    = ee.Image(100).subtract(d_DESCENDING).divide(k_DESCENDING).rename('WetCondition_DESCENDING');
+var Sen_DESCENDING    = Wet_DESCENDING.subtract(Dry_DESCENDING).rename('Sensitivity_DESCENDING');
+
+var S1_GRD = S1_GRD.filter(ee.Filter.date('2022-01-01', '2022-12-31')).filterBounds(AOI)
+                   .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+                   .filter(ee.Filter.eq('instrumentMode', 'IW'))
+                   .select('VV');
+
+function getSSM(image){
+  var SSM_ASCENDING  = image.subtract(Dry_ASCENDING).divide(Sen_ASCENDING).clamp(0, 100).rename('SSM_ASCENDING');
+  var SSM_DESCENDING = image.subtract(Dry_DESCENDING).divide(Sen_DESCENDING).clamp(0, 100).rename('SSM_DESCENDING');
+  var SSM            = ee.ImageCollection.fromImages([SSM_ASCENDING.rename('b'), SSM_DESCENDING.rename('b')]).mean().rename('SSM');
+  return SSM.copyProperties(image, image.propertyNames()).set({'mm':ee.Date(image.get('system:time_start')).get('month')});
+  }
+  
+var S1_GRD01 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 1).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD02 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 2).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD03 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 3).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD04 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 4).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD05 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 5).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD06 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 6).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD07 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 7).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD08 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 8).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD09 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 9).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD10 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 10).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD11 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 11).mean().multiply(1000).toInt().clip(AOI);
+var S1_GRD12 = S1_GRD.map(getSSM).filterMetadata('mm', 'equals', 12).mean().multiply(1000).toInt().clip(AOI);
+
+var crs   = 'EPSG:4326';
+var Scale = 231.91556871282302;
+Export.image.toDrive({image:S1_GRD01, description:'S1_GRD01', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD02, description:'S1_GRD02', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD03, description:'S1_GRD03', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD04, description:'S1_GRD04', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD05, description:'S1_GRD05', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD06, description:'S1_GRD06', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD07, description:'S1_GRD07', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD08, description:'S1_GRD08', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD09, description:'S1_GRD09', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD10, description:'S1_GRD10', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD11, description:'S1_GRD11', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
+Export.image.toDrive({image:S1_GRD12, description:'S1_GRD12', region:AOI, crs:crs, scale:Scale, maxPixels:1e13, folder:'SSM'});
